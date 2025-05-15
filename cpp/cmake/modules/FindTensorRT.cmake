@@ -31,17 +31,59 @@ function(_tensorrt_get_version)
     return()
   endif()
 
-  file(STRINGS "${_hdr_file}" VERSION_STRINGS REGEX "#define NV_TENSORRT_.*")
+  # Try to parse the new format first (TRT_..._ENTERPRISE)
+  file(STRINGS "${_hdr_file}" VERSION_STRINGS_NEW REGEX "#define TRT_.*_ENTERPRISE [0-9]+")
+  set(FOUND_ALL_NEW_FORMAT TRUE)
+  foreach(TYPE MAJOR MINOR PATCH BUILD)
+    string(REGEX MATCH "TRT_${TYPE}_ENTERPRISE [0-9]+" TRT_TYPE_STRING_NEW ${VERSION_STRINGS_NEW})
+    if(TRT_TYPE_STRING_NEW)
+      string(REGEX MATCH "[0-9]+" TensorRT_VERSION_${TYPE}_NEW ${TRT_TYPE_STRING_NEW})
+      if(NOT TensorRT_VERSION_${TYPE}_NEW)
+        set(FOUND_ALL_NEW_FORMAT FALSE)
+        break()
+      endif()
+    else()
+      set(FOUND_ALL_NEW_FORMAT FALSE)
+      break()
+    endif()
+  endforeach(TYPE)
+
+  if(FOUND_ALL_NEW_FORMAT)
+    set(TensorRT_VERSION_MAJOR ${TensorRT_VERSION_MAJOR_NEW} PARENT_SCOPE)
+    set(TensorRT_VERSION_MINOR ${TensorRT_VERSION_MINOR_NEW} PARENT_SCOPE)
+    set(TensorRT_VERSION_PATCH ${TensorRT_VERSION_PATCH_NEW} PARENT_SCOPE)
+    set(TensorRT_VERSION_BUILD ${TensorRT_VERSION_BUILD_NEW} PARENT_SCOPE)
+    set(TensorRT_VERSION_STRING
+        "${TensorRT_VERSION_MAJOR_NEW}.${TensorRT_VERSION_MINOR_NEW}.${TensorRT_VERSION_PATCH_NEW}.${TensorRT_VERSION_BUILD_NEW}"
+        PARENT_SCOPE)
+    # message(STATUS "Parsed TensorRT version (New Format): ${TensorRT_VERSION_STRING}")
+    return()
+  endif()
+
+  # Fallback to old format (NV_TENSORRT_...)
+  # message(STATUS "New format parsing failed or incomplete, falling back to old format for TensorRT version.")
+  file(STRINGS "${_hdr_file}" VERSION_STRINGS_OLD REGEX "#define NV_TENSORRT_.* [0-9]+")
 
   foreach(TYPE MAJOR MINOR PATCH BUILD)
-    string(REGEX MATCH "NV_TENSORRT_${TYPE} [0-9]+" TRT_TYPE_STRING
-                 ${VERSION_STRINGS})
-    string(REGEX MATCH "[0-9]+" TensorRT_VERSION_${TYPE} ${TRT_TYPE_STRING})
+    string(REGEX MATCH "NV_TENSORRT_${TYPE} [0-9]+" TRT_TYPE_STRING_OLD
+                   ${VERSION_STRINGS_OLD})
+    if(TRT_TYPE_STRING_OLD)
+      string(REGEX MATCH "[0-9]+" TensorRT_VERSION_${TYPE} ${TRT_TYPE_STRING_OLD})
+    else()
+      # If any part of the old format is missing, clear them all to avoid partial versions
+      set(TensorRT_VERSION_MAJOR "" PARENT_SCOPE)
+      set(TensorRT_VERSION_MINOR "" PARENT_SCOPE)
+      set(TensorRT_VERSION_PATCH "" PARENT_SCOPE)
+      set(TensorRT_VERSION_BUILD "" PARENT_SCOPE)
+      # message(WARNING "Could not parse TensorRT version using old format from ${_hdr_file}")
+      return()
+    endif()
   endforeach(TYPE)
 
   set(TensorRT_VERSION_STRING
       "${TensorRT_VERSION_MAJOR}.${TensorRT_VERSION_MINOR}.${TensorRT_VERSION_PATCH}.${TensorRT_VERSION_BUILD}"
       PARENT_SCOPE)
+  # message(STATUS "Parsed TensorRT version (Old Format): ${TensorRT_VERSION_STRING}")
 endfunction(_tensorrt_get_version)
 
 _tensorrt_get_version()
